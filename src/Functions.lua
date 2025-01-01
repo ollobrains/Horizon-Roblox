@@ -1,215 +1,242 @@
 --[[
-  @Description: Contains a list of useful functions.
+	@module UtilityFunctions
+	@description A set of miscellaneous functions for spawning, welding, randomization, 
+	             and other general tasks in Roblox. Part of the "Blood-Engine."
+
+	Author: <Your Name or Team>
+	Last updated: YYYY-MM-DD
 ]]
 
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
--- Variable definitions
+--// Module Declaration
+local UtilityFunctions = {}
+
+--// Internal references
 local ParentClass = script.Parent
-local Assets = ParentClass.Assets
+local Assets = ParentClass:WaitForChild("Assets") -- safer than `.Assets`, ensures existence
 
--- Asset definitions
-local Images = Assets.Images
-local Essentials = Assets.Essentials
-local Effects = Assets.Effects
+--// Asset references
+local Images = Assets:WaitForChild("Images")
+local Essentials = Assets:WaitForChild("Essentials")
+local Effects = Assets:WaitForChild("Effects")
 
--- Effect definitions
-local TrailEffects = Effects.Trail
-local ImpactEffects = Effects.Impact
+local TrailEffects = Effects:WaitForChild("Trail")
+local ImpactEffects = Effects:WaitForChild("Impact")
 
--- Essential definitions
-local FastCast = require(Essentials.FastCast)
-local Random = Random.new()
+local FastCast = require(Essentials:WaitForChild("FastCast"))
 
--- Globals
-local Unpack = table.unpack
+--// Global objects
+local RandomGen = Random.new()
 local Decals = Images:GetChildren()
 
--- Module definition
-local Functions = {}
-
--- Variable definitions
-local Properties = {
+--// Table of property names for droplet reset
+local ResettableProperties = {
 	"Size",
 	"Transparency",
 	"Anchored",
 }
 
 --[[
-  A shorter way of doing:
-  ```lua
-    typeof(Variable) == "Type"
-  ```
+	@function IsOfType
+	@within UtilityFunctions
+	@desc Shortcut for checking if `Any` matches `Type`.
+	@param Any any
+	@param Type string
+	@return boolean
 ]]
-function Functions.IsOfType(Any, Type: string)
+function UtilityFunctions.IsOfType(Any, Type)
 	return typeof(Any) == Type
 end
 
 --[[
-  Allows the ability to insert an array of
-   variables efficently onto a table.
+	@function MultiInsert
+	@within UtilityFunctions
+	@desc Inserts an array of `Variables` onto a table `List` in an efficient manner. 
+	      If the variable is a function, it is called first and expected to return the real value to insert.
+	@param List table
+	@param Variables table
 ]]
-function Functions.MultiInsert(List: {}, Variables: {})
-	for Key, Variable in Variables do
-		--[[
-      Executes the variable if it's a function,
-      It is expected to return a variable to later assign.
-    ]]
-		if Functions.IsOfType(Variable, "function") then
+function UtilityFunctions.MultiInsert(List, Variables)
+	for Key, Variable in pairs(Variables) do
+		if UtilityFunctions.IsOfType(Variable, "function") then
 			Variable = Variable()
 		end
 
-		-- Adds in the variable with a key
-		if Functions.IsOfType(Key, "string") then
+		if UtilityFunctions.IsOfType(Key, "string") then
 			List[Key] = Variable
+		else
+			table.insert(List, Variable)
 		end
-
-		-- Adds in the variable without a key
-		table.insert(List, Variable)
 	end
 end
 
 --[[
-  Returns the name of the specified function
-  within the class’s metatable.
+	@function GetFunctionName
+	@within UtilityFunctions
+	@desc Returns the key name of the specified `Function` within `Table`.
+	@param Function function
+	@param Table table
+	@return string|nil
 ]]
-function Functions.GetFunctionName(Function, Table)
-	for Name, AltFunction in Table do
-		return AltFunction == Function and Name
+function UtilityFunctions.GetFunctionName(Function, Table)
+	for Name, AltFunction in pairs(Table) do
+		if AltFunction == Function then
+			return Name
+		end
 	end
 
 	return nil
 end
 
 --[[
-  Sets up a `CastBehavior` for later use,
-  then returns it.
+	@function SetupBehavior
+	@within UtilityFunctions
+	@desc Sets up and returns a FastCast behavior object.
+	@param Cache any - A cosmetic bullet provider or item cache
+	@param CastParams RaycastParams
+	@return FastCast.Behavior
 ]]
-function Functions.SetupBehavior(Cache, CastParams): FastCast.Behavior
-	-- Define Variables
+function UtilityFunctions.SetupBehavior(Cache, CastParams)
 	local Behavior = FastCast.newBehavior()
 	local Gravity = Workspace.Gravity
 
-	-- Update Behavior properties
 	Behavior.Acceleration = Vector3.new(0, -Gravity, 0)
 	Behavior.MaxDistance = 500
 	Behavior.RaycastParams = CastParams
 	Behavior.CosmeticBulletProvider = Cache
 
-	-- Export behavior
 	return Behavior
 end
 
 --[[
-	Clones and parents Droplet effects from a template part.
+	@function CreateEffects
+	@within UtilityFunctions
+	@desc Clones and attaches droplet/trail/impact effects to a given mesh part.
+	@param Parent MeshPart
+	@param ImpactName string - Name for the impact attachment
 ]]
-function Functions.CreateEffects(Parent: MeshPart, ImpactName: string)
-	-- Variable definitions
-	local Trail = TrailEffects:Clone()
-	
+function UtilityFunctions.CreateEffects(Parent, ImpactName)
+	local TrailClone = TrailEffects:Clone()
+
 	local Attachment0 = Instance.new("Attachment")
 	local Attachment1 = Instance.new("Attachment")
 	local ImpactAttachment = Instance.new("Attachment")
-	
-	-- Update Trail-related properties
-	Trail.Attachment0 = Attachment0
-	Trail.Attachment1 = Attachment1
-	
-	Attachment1.Position = Vector3.new(0.037, 0, 0)
+
+	TrailClone.Attachment0 = Attachment0
+	TrailClone.Attachment1 = Attachment1
+
 	Attachment0.Name = "Attachment0"
 	Attachment1.Name = "Attachment1"
-	
+	Attachment1.Position = Vector3.new(0.037, 0, 0) -- small offset
+
 	Attachment0.Parent = Parent
 	Attachment1.Parent = Parent
-	Trail.Parent = Parent
+	TrailClone.Parent = Parent
 
-	-- Update Impact-related properties
 	for _, Effect in ipairs(ImpactEffects:GetChildren()) do
 		local Clone = Effect:Clone()
 		Clone.Parent = ImpactAttachment
 	end
-	
+
 	ImpactAttachment.Name = ImpactName
-	ImpactAttachment.Parent = Parent
 	ImpactAttachment.Orientation = Vector3.new(0, 0, 0)
+	ImpactAttachment.Parent = Parent
 end
 
 --[[
-	Returns an empty object template that's going to be used as a droplet.
+	@function GetDroplet
+	@within UtilityFunctions
+	@desc Returns a small mesh part configured as a droplet. 
+	      Also creates default trail/impact attachments via `CreateEffects`.
+	@param ImpactName string
+	@param IsDecal boolean
+	@return MeshPart
 ]]
-function Functions.GetDroplet(ImpactName: string, IsDecal: boolean): {}
-	-- Variable definitions
+function UtilityFunctions.GetDroplet(ImpactName, IsDecal)
 	local Droplet = Instance.new("MeshPart")
-	
-	-- Update properties
+
 	Droplet.Size = Vector3.new(0.1, 0.1, 0.1)
 	Droplet.Transparency = 0.25
 	Droplet.Material = Enum.Material.Glass
-	
 	Droplet.Anchored = false
 	Droplet.CanCollide = false
 	Droplet.CanQuery = false
 	Droplet.CanTouch = false
-	
-	-- Export droplet
-	Functions.CreateEffects(Droplet, ImpactName)
+
+	UtilityFunctions.CreateEffects(Droplet, ImpactName)
 	return Droplet
 end
 
 --[[
-  Returns a folder that handles droplets; If it doesn't exist,
-  make a new one in Workspace.Terrain.
+	@function GetFolder
+	@within UtilityFunctions
+	@desc Returns a folder named `Name` under `Workspace.Terrain`. Creates it if missing.
+	@param Name string
+	@return Folder
 ]]
-function Functions.GetFolder(Name: string): Folder
-	-- Variable definitons
+function UtilityFunctions.GetFolder(Name)
 	local Terrain = Workspace.Terrain
-	local DropletsFolder = (Terrain:FindFirstChild(Name) or Instance.new("Folder"))
+	local ExistingFolder = Terrain:FindFirstChild(Name)
+	if ExistingFolder then
+		return ExistingFolder
+	end
 
-	-- Update properties
-	DropletsFolder.Name = Name
-	DropletsFolder.Parent = Terrain
-
-	-- Export folder
-	return DropletsFolder
+	local NewFolder = Instance.new("Folder")
+	NewFolder.Name = Name
+	NewFolder.Parent = Terrain
+	return NewFolder
 end
 
 --[[
-  Returns a Vector3, given the array range.
+	@function GetVector
+	@within UtilityFunctions
+	@desc Creates a random Vector3 from the array Range. 
+	      Calls Random:NextNumber on each axis with the same min/max.
+	@param Range table [Min, Max]
+	@return Vector3
 ]]
-function Functions.GetVector(Range: {})
-	-- Vector definition
-	local Vector = Vector3.new(
-		Random:NextNumber(Unpack(Range)),
-		Random:NextNumber(Unpack(Range)),
-		Random:NextNumber(Unpack(Range))
-	)
-
-	-- Export position with applied offset
-	return Vector
+function UtilityFunctions.GetVector(Range)
+	local x = RandomGen:NextNumber(unpack(Range))
+	local y = RandomGen:NextNumber(unpack(Range))
+	local z = RandomGen:NextNumber(unpack(Range))
+	return Vector3.new(x, y, z)
 end
 
 --[[
-  NextNumber; Uses a global Random class,
-  this is done for efficency.
+	@function NextNumber
+	@within UtilityFunctions
+	@desc Returns a random float in [Minimum, Maximum].
+	@param Minimum number
+	@param Maximum number
+	@return number
 ]]
-function Functions.NextNumber(Minimum, Maximum): number
-	return Random:NextNumber(Minimum, Maximum)
+function UtilityFunctions.NextNumber(Minimum, Maximum)
+	return RandomGen:NextNumber(Minimum, Maximum)
 end
 
 --[[
-  An efficent way of doing TweenService:Create(...)
+	@function CreateTween
+	@within UtilityFunctions
+	@desc Shortcut to quickly create a tween.
+	@param Object Instance
+	@param Info TweenInfo
+	@param Goal table
+	@return Tween
 ]]
-function Functions.CreateTween(Object: Instance, Info: TweenInfo, Goal: {}): Tween
-	-- Export tween
+function UtilityFunctions.CreateTween(Object, Info, Goal)
 	return TweenService:Create(Object, Info, Goal)
 end
 
 --[[
-  Plays a sound in the given parent,
-  used to play `End` & `Start` sounds.
+	@function PlaySound
+	@within UtilityFunctions
+	@desc Clones and plays a `Sound` inside `Parent`. Once finished, it is destroyed.
+	@param Sound Sound
+	@param Parent Instance
 ]]
-function Functions.PlaySound(Sound: Sound, Parent: Instance)
+function UtilityFunctions.PlaySound(Sound, Parent)
 	if not Sound then
 		return
 	end
@@ -225,194 +252,216 @@ function Functions.PlaySound(Sound: Sound, Parent: Instance)
 end
 
 --[[
-  Returns a random value/object from the
-  given table.
+	@function GetRandom
+	@within UtilityFunctions
+	@desc Returns a random element from the given Table, or nil if empty.
+	@param Table table
+	@return any|nil
 ]]
-function Functions.GetRandom(Table: {})
-	return #Table > 0 and Table[math.random(1, #Table)]
+function UtilityFunctions.GetRandom(Table)
+	local Count = #Table
+	if Count == 0 then
+		return nil
+	end
+	return Table[math.random(1, Count)]
 end
 
 --[[
-  Resets the properties of the given droplet,
-  used to return pools to be recycled.
+	@function ResetDroplet
+	@within UtilityFunctions
+	@desc Resets the properties of the droplet `Object` using the original reference.
+	      Typically used in object pooling.
+	@param Object Instance - The droplet object to reset
+	@param Original Instance - The reference containing original property values
+	@return Instance
 ]]
-function Functions.ResetDroplet(Object: Instance, Original: Instance)
-	-- Variable definitions
-	local Decal = Object:FindFirstChildOfClass("SurfaceAppearance")
-	local Weld = Object:FindFirstChildOfClass("WeldConstraint")
-	local Trail = Object:FindFirstChildOfClass("Trail")
+function UtilityFunctions.ResetDroplet(Object, Original)
+	local decal = Object:FindFirstChildOfClass("SurfaceAppearance")
+	local weld = Object:FindFirstChildOfClass("WeldConstraint")
+	local trail = Object:FindFirstChildOfClass("Trail")
 
-	-- Reset all properties
-	for _, Property: string in Properties do
+	for _, Property in ipairs(ResettableProperties) do
 		Object[Property] = Original[Property]
 	end
 
-	-- Update outsider properties
-	if Trail then
-		Trail.Enabled = false
+	if trail then
+		trail.Enabled = false
 	end
 
-	if Weld then
-		Weld:Destroy()
+	if weld then
+		weld:Destroy()
 	end
 
-	if Decal then
-		Decal:Destroy()
+	if decal then
+		decal:Destroy()
 	end
 
-	-- Export object
 	return Object
 end
 
 --[[
-	Manages the sequence of decals;
-	initiates only when the Type is designated as Decals.
+	@function ApplyDecal
+	@within UtilityFunctions
+	@desc If IsDecal is true, picks a random Decal from `Decals` and parents it to `Object`.
+	@param Object Instance
+	@param IsDecal boolean
 ]]
-function Functions.ApplyDecal(Object: Instance, IsDecal: boolean)
+function UtilityFunctions.ApplyDecal(Object, IsDecal)
 	if not IsDecal then
 		return
 	end
 
-	-- Variable definitions
-	local Decal: SurfaceAppearance = Functions.GetRandom(Decals):Clone()
+	local RandomDecal = UtilityFunctions.GetRandom(Decals)
+	if not RandomDecal then
+		warn("ApplyDecal: No Decals found.")
+		return
+	end
 
-	-- Update Decal properties
-	Decal.Parent = Object
+	local DecalClone = RandomDecal:Clone()
+	DecalClone.Parent = Object
 end
 
 --[[
-	Emits particles by looping
-	through an attachment's children; emitting a specific
-	amount of them using the given amount.
+	@function EmitParticles
+	@within UtilityFunctions
+	@desc For each ParticleEmitter child of `Attachment`, calls :Emit(Amount).
+	@param Attachment Attachment
+	@param Amount number
 ]]
-function Functions.EmitParticles(Attachment: Attachment, Amount: number)
-	-- Variable definitions
-	local Particles = Attachment:GetChildren()
-
-	-- Emits particles
-	for _, Particle: ParticleEmitter in Particles do
-		if not Particle:IsA("ParticleEmitter") then
-			continue
+function UtilityFunctions.EmitParticles(Attachment, Amount)
+	for _, Child in ipairs(Attachment:GetChildren()) do
+		if Child:IsA("ParticleEmitter") then
+			Child:Emit(Amount)
 		end
-
-		Particle:Emit(Amount)
 	end
 end
 
 --[[
-	Returns the closest part within a given distance.
+	@function GetClosest
+	@within UtilityFunctions
+	@desc Finds the closest part within `Magnitude` to `Origin`, 
+	      ignoring anchored parts and ignoring `Origin` itself.
+	@param Origin BasePart
+	@param Magnitude number - The search radius
+	@param Ancestor Instance - The container from which to search
+	@return BasePart|nil
 ]]
-function Functions.GetClosest(Origin: BasePart, Magnitude: number, Ancestor): BasePart
-	-- Variable definitions
-	local Children = Ancestor:GetChildren()
+function UtilityFunctions.GetClosest(Origin, Magnitude, Ancestor)
 	local ClosestPart = nil
-	local MinimumDistance = math.huge
+	local MinDist = math.huge
 
-	for _, Part: BasePart in Children do
-		local Distance = (Origin.Position - Part.Position).Magnitude
-
-		local Logic = (not Part.Anchored and Origin ~= Part and Distance < Magnitude and Distance < MinimumDistance)
-
-		if not Logic then
+	for _, Child in ipairs(Ancestor:GetChildren()) do
+		local Part = Child
+		if not Part:IsA("BasePart") then
 			continue
 		end
 
-		MinimumDistance = Distance
-		ClosestPart = Part
+		local Dist = (Origin.Position - Part.Position).Magnitude
+		local Valid = (not Part.Anchored) and (Part ~= Origin) and (Dist < Magnitude) and (Dist < MinDist)
+		if Valid then
+			MinDist = Dist
+			ClosestPart = Part
+		end
 	end
 
-	-- Export closest part
 	return ClosestPart
 end
 
 --[[
-	Provides the target angles; utilized to
-	assign the orientation to base position or CFrame.
+	@function GetAngles
+	@within UtilityFunctions
+	@desc Creates a CFrame of angles, primarily used for orientation
+	      of a droplet or decal.
+	@param IsDecal boolean
+	@param RandomAngles boolean
+	@return CFrame
 ]]
-function Functions.GetAngles(IsDecal: boolean, RandomAngles: boolean): CFrame
-	-- Variable definitions
-	local RandomAngle = Functions.NextNumber(0, 180)
-	local AngleX = (IsDecal and -math.pi / 2 or math.pi / 2)
-	local AngleY = (RandomAngles and RandomAngle or 0)
-
-	-- Export angles
+function UtilityFunctions.GetAngles(IsDecal, RandomAngles)
+	local RandAngle = UtilityFunctions.NextNumber(0, math.rad(180))
+	local AngleX = IsDecal and -math.pi / 2 or math.pi / 2
+	local AngleY = RandomAngles and RandAngle or 0
 	return CFrame.Angles(AngleX, AngleY, 0)
 end
 
 --[[
-	Delievers the target position; serves
-	as a foundation that is subsequently
-	applied with an orientation.
+	@function GetCFrame
+	@within UtilityFunctions
+	@desc Builds a CFrame from a position plus normal, offset for decals if needed.
+	@param Position Vector3
+	@param Normal Vector3
+	@param IsDecal boolean
+	@return CFrame
 ]]
-function Functions.GetCFrame(Position: Vector3, Normal: Vector3, IsDecal: boolean): CFrame
-	-- Variable definitions
-	local DecalOffset = (IsDecal and (Normal / 76) or Vector3.zero)
-
-	local Base = (Position + DecalOffset)
-
-	local Target = (Position + Normal)
-
-	-- Export cframe
-	return CFrame.new(Base, Target)
+function UtilityFunctions.GetCFrame(Position, Normal, IsDecal)
+	local DecalOffset = IsDecal and (Normal / 76) or Vector3.zero
+	local BasePos = Position + DecalOffset
+	local Target = Position + Normal
+	return CFrame.new(BasePos, Target)
 end
 
 --[[
-	Refines the components of the given
-	Vector3; utilized to implement modifications
-	based on factors.
+	@function RefineVectors
+	@within UtilityFunctions
+	@desc If IsDecal is true, zeroes out Y, otherwise returns VectorData as is.
+	@param IsDecal boolean
+	@param VectorData Vector3
+	@return Vector3
 ]]
-function Functions.RefineVectors(IsDecal: boolean, VectorData: Vector3)
-	local YVector = (IsDecal and 0 or VectorData.Y)
-
-	return Vector3.new(VectorData.X, YVector, VectorData.Z)
+function UtilityFunctions.RefineVectors(IsDecal, VectorData)
+	local yValue = IsDecal and 0 or VectorData.Y
+	return Vector3.new(VectorData.X, yValue, VectorData.Z)
 end
 
 --[[
-  Weld, creates a WeldConstraint between two parts
-   (Part0 and Part1).
+	@function Weld
+	@within UtilityFunctions
+	@desc Creates a WeldConstraint between Part0 and Part1, sets Part1.Anchored=false.
+	@param Part0 BasePart
+	@param Part1 BasePart
+	@return WeldConstraint
 ]]
-function Functions.Weld(Part0: BasePart, Part1: BasePart): WeldConstraint
-	-- Variable definitions
+function UtilityFunctions.Weld(Part0, Part1)
 	local Weld = Instance.new("WeldConstraint")
-
-	-- Update Part properties
 	Part1.Anchored = false
 
-	-- Update Weld properties
-	Weld.Parent = Part1
 	Weld.Part0 = Part0
 	Weld.Part1 = Part1
+	Weld.Parent = Part1
 
-	-- Export weld
 	return Weld
 end
 
 --[[
-	Adds a connection to a table that holds connections.
+	@function Connect
+	@within UtilityFunctions
+	@desc Inserts a new RBXScriptConnection into a given table of connections.
+	@param Connection RBXScriptConnection
+	@param Holder table
 ]]
-function Functions.Connect(Connection: RBXScriptConnection, Holder: { RBXScriptConnection })
-	-- Update table
+function UtilityFunctions.Connect(Connection, Holder)
 	table.insert(Holder, Connection)
 end
 
 --[[
-	Destroys and disconnects all the connections 
-	in a table that holds connections.
+	@function DisconnectAll
+	@within UtilityFunctions
+	@desc Iterates a table of connections, disconnects them, and clears the table entries.
+	@param Holder table
 ]]
-function Functions.DisconnectAll(Holder: { RBXScriptConnection })
-	-- Disconnect and destroy connections in Holder
-	for Index, Connection: RBXScriptConnection in Holder do
+function UtilityFunctions.DisconnectAll(Holder)
+	for i, Connection in ipairs(Holder) do
 		Connection:Disconnect()
-		Holder[Index] = nil
+		Holder[i] = nil
 	end
 end
 
 --[[
-	Basic function used to replace the initial module methods,
-	therefore avoiding errors after deletion of the module.
+	@function Replacement
+	@within UtilityFunctions
+	@desc Placeholder for removed or replaced functions.
 ]]
-function Functions.Replacement()
-	warn("BLOOD-ENGINE - Attempt to call a deleted function.")
+function UtilityFunctions.Replacement()
+	warn("BLOOD-ENGINE: Attempt to call a deleted function.")
 end
 
-return Functions
+return UtilityFunctions
